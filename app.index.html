@@ -1,0 +1,254 @@
+<!-- ================================
+PROJQDO - Arduino Project Note App with New Project Button
+Features: Total cost with quantity, search, edit/delete via 3-dots menu, preview on click, New Project creation
+================================ -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PROJQDO</title>
+<style>
+  body { margin:0; font-family:Arial,sans-serif; background:#0a192f; color:#fff; }
+
+  /* Splash Screen */
+  .splash {
+    display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh;
+    background: radial-gradient(circle at top left, #0f1b2b 0%, #1c2a3c 100%);
+    background-image: url('https://images.unsplash.com/photo-1581092795363-72e201b92ce8?auto=format&fit=crop&w=1400&q=80');
+    background-size: cover;
+    background-position: center;
+    background-blend-mode: overlay;
+  }
+  .splash h1 {
+    font-size:48px; margin-bottom:20px; font-family:'Courier New',monospace; letter-spacing:3px;
+    color:#00d1ff; text-shadow: 0 0 10px rgba(0,209,255,0.6), 0 0 20px rgba(0,209,255,0.3);
+  }
+  .start-btn {
+    padding:15px 30px; font-size:18px; background:#1c2a3c; border:none; cursor:pointer; color:#00d1ff; box-shadow:0 0 5px rgba(0,209,255,0.4);
+  }
+  .start-btn:hover { background:#111f2c; }
+
+  /* Main App */
+  .container { display:none; height:100vh; color:#000; }
+  .left { width:260px; background:#e0e0e0; color:#000; padding:10px; box-sizing:border-box; }
+  .left h2 { font-size:16px; margin-top:0; display:flex; justify-content:space-between; align-items:center; }
+  .left input { width:100%; margin-bottom:10px; padding:6px; }
+  .left ul { list-style:none; padding:0; margin:0; }
+  .left li { padding:6px; cursor:pointer; border-bottom:1px solid #c0c0c0; display:flex; justify-content:space-between; align-items:center; position:relative; }
+  .left li:hover { background:#d0d0d0; }
+  .menu-btn { background:transparent; border:none; cursor:pointer; font-weight:bold; }
+  .menu-options { display:none; position:absolute; top:100%; right:0; background:#ccc; color:#000; border:1px solid #999; padding:5px; z-index:100; }
+  .menu-options button { display:block; width:100%; background:#ddd; border:none; padding:5px; margin:0; text-align:left; }
+  .menu-options button:hover { background:#bbb; }
+  .right { flex:1; padding:15px; overflow-y:auto; background:#f8f8f8; color:#000; box-sizing:border-box; border-left:1px solid #c0c0c0; }
+  input, textarea, button { width:100%; margin:6px 0; padding:6px; font-size:14px; box-sizing:border-box; background:#fff; color:#000; border:1px solid #999; }
+  input:focus, textarea:focus { outline:none; border:1px solid #555; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+  table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+  table, th, td { border:1px solid #999; }
+  th, td { padding:6px; text-align:left; }
+  button { background:#bbb; color:#000; border:none; cursor:pointer; }
+  button:hover { background:#999; }
+  .delete-btn { background:red; margin-left:5px; color:white; }
+  .edit-btn { background:green; margin-left:5px; color:white; }
+  .total { font-weight:bold; }
+  .new-project-btn { padding:4px 8px; font-size:12px; background:#00d1ff; color:#000; border:none; cursor:pointer; }
+  .new-project-btn:hover { background:#00a0cc; }
+</style>
+</head>
+<body>
+
+<div class="splash" id="splashScreen">
+  <h1>PROJQDO</h1>
+  <button class="start-btn" onclick="startApp()">START YOUR PROJECT</button>
+</div>
+
+<div class="container" id="mainApp">
+  <div class="left">
+    <h2>
+      Projects
+      <button class="new-project-btn" onclick="newProject()">New Project</button>
+    </h2>
+    <input id="searchProject" placeholder="Search Projects" onkeyup="searchProject()">
+    <ul id="projectList"></ul>
+  </div>
+
+  <div class="right" id="previewArea">
+    <h2>Project Title</h2>
+    <input id="title" placeholder="Enter Project Title">
+
+    <h3>Components</h3>
+    <input id="compName" placeholder="Component Name">
+    <input id="compPrice" placeholder="Price">
+    <input id="compQty" placeholder="Quantity">
+    <button onclick="addComponent()">Add Component</button>
+
+    <table>
+      <thead>
+        <tr><th>Component</th><th>Price</th><th>Qty</th><th>Action</th></tr>
+      </thead>
+      <tbody id="componentTable"></tbody>
+      <tfoot id="componentTotal"></tfoot>
+    </table>
+
+    <h3>Description</h3>
+    <textarea id="description" rows="5"></textarea>
+
+    <h3>Arduino Code</h3>
+    <textarea id="code" rows="8"></textarea>
+
+    <button onclick="saveProject()">Save Project</button>
+  </div>
+</div>
+
+<script>
+let projects = JSON.parse(localStorage.getItem('arduinoProjects') || '[]');
+let components = [];
+let currentProjectIndex = null;
+
+function startApp(){
+  document.getElementById('splashScreen').style.display='none';
+  document.getElementById('mainApp').style.display='flex';
+  refreshProjectList();
+}
+
+function newProject(){
+  clearAll();
+  currentProjectIndex = null;
+}
+
+function refreshProjectList() {
+  const list = document.getElementById('projectList');
+  list.innerHTML = '';
+  projects.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.textContent = p.title;
+    li.onclick = ()=>previewProject(i);
+
+    const menuBtn = document.createElement('button');
+    menuBtn.textContent='⋮'; menuBtn.className='menu-btn';
+    menuBtn.onclick = (e)=>{
+      e.stopPropagation();
+      const options = li.querySelector('.menu-options');
+      options.style.display = options.style.display==='block' ? 'none':'block';
+    };
+
+    const menuOptions = document.createElement('div');
+    menuOptions.className='menu-options';
+    const editBtn = document.createElement('button'); editBtn.textContent='Edit'; editBtn.onclick=()=>{ loadProject(i); menuOptions.style.display='none'; };
+    const delBtn = document.createElement('button'); delBtn.textContent='Delete'; delBtn.onclick=()=>{ projects.splice(i,1); localStorage.setItem('arduinoProjects',JSON.stringify(projects)); refreshProjectList(); };
+    menuOptions.appendChild(editBtn); menuOptions.appendChild(delBtn);
+
+    li.appendChild(menuBtn);
+    li.appendChild(menuOptions);
+
+    list.appendChild(li);
+  });
+}
+
+function searchProject(){
+  const query = document.getElementById('searchProject').value.toLowerCase();
+  const list = document.getElementById('projectList');
+  list.innerHTML='';
+  projects.forEach((p,i)=>{
+    if(p.title.toLowerCase().includes(query)){
+      const li = document.createElement('li');
+      li.textContent=p.title;
+      li.onclick = ()=>previewProject(i);
+
+      const menuBtn = document.createElement('button');
+      menuBtn.textContent='⋮'; menuBtn.className='menu-btn';
+      menuBtn.onclick = (e)=>{
+        e.stopPropagation();
+        const options = li.querySelector('.menu-options');
+        options.style.display = options.style.display==='block' ? 'none':'block';
+      };
+
+      const menuOptions = document.createElement('div');
+      menuOptions.className='menu-options';
+      const editBtn = document.createElement('button'); editBtn.textContent='Edit'; editBtn.onclick=()=>{ loadProject(i); menuOptions.style.display='none'; };
+      const delBtn = document.createElement('button'); delBtn.textContent='Delete'; delBtn.onclick=()=>{ projects.splice(i,1); localStorage.setItem('arduinoProjects',JSON.stringify(projects)); refreshProjectList(); };
+      menuOptions.appendChild(editBtn); menuOptions.appendChild(delBtn);
+
+      li.appendChild(menuBtn);
+      li.appendChild(menuOptions);
+
+      list.appendChild(li);
+    }
+  });
+}
+
+function addComponent() {
+  const name = document.getElementById('compName').value.trim();
+  const price = parseFloat(document.getElementById('compPrice').value.trim());
+  const qty = parseInt(document.getElementById('compQty').value.trim());
+  if(!name || isNaN(price) || isNaN(qty) || qty<1) return;
+  components.push({name, price, qty});
+  renderComponents();
+  document.getElementById('compName').value='';
+  document.getElementById('compPrice').value='';
+  document.getElementById('compQty').value='';
+}
+
+function deleteComponent(index) {
+  components.splice(index, 1);
+  renderComponents();
+}
+
+function renderComponents() {
+  const table = document.getElementById('componentTable');
+  table.innerHTML='';
+  components.forEach((c, idx) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${c.name}</td><td>${c.price}</td><td>${c.qty}</td><td><button class='delete-btn' onclick='deleteComponent(${idx})'>Delete</button></td>`;
+    table.appendChild(row);
+  });
+
+  const total = components.reduce((sum,c)=>sum+c.price*c.qty,0);
+  document.getElementById('componentTotal').innerHTML=`<tr><td class='total'>Total</td><td class='total'>${total}</td><td></td><td></td></tr>`;
+}
+
+function saveProject() {
+  const title = document.getElementById('title').value.trim();
+  if(!title) { alert('Project Title required'); return; }
+
+  const project = {title, components, description: document.getElementById('description').value, code: document.getElementById('code').value};
+
+  if(currentProjectIndex!==null){projects[currentProjectIndex]=project;}
+  else{projects.push(project);}
+
+  localStorage.setItem('arduinoProjects',JSON.stringify(projects));
+  clearAll();
+  refreshProjectList();
+}
+
+function loadProject(i){
+  const p = projects[i];
+  document.getElementById('title').value = p.title;
+  document.getElementById('description').value = p.description;
+  document.getElementById('code').value = p.code;
+  components = p.components || [];
+  currentProjectIndex = i;
+  renderComponents();
+}
+
+function previewProject(i){
+  const p = projects[i];
+  document.getElementById('title').value = p.title;
+  document.getElementById('description').value = p.description;
+  document.getElementById('code').value = p.code;
+  components = p.components || [];
+  renderComponents();
+  currentProjectIndex = i;
+}
+
+function clearAll(){
+  document.getElementById('title').value='';
+  document.getElementById('description').value='';
+  document.getElementById('code').value='';
+  components=[]; currentProjectIndex=null; renderComponents();
+}
+</script>
+
+</body>
+</html>
